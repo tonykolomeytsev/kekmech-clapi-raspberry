@@ -97,9 +97,16 @@ class TaskPool():
     def reset(self):
         self.subscribers = dict()
         self.tasks = list()
-        self.task_lock.release()
-        self.subscribers_lock.release()
-        self.serial_lock.release()
+        if (self.task_lock.locked()): self.task_lock.release()
+        if (self.subscribers_lock.locked()): self.subscribers_lock.release()
+        if (self.serial_lock.locked()): self.serial_lock.release()
+    
+    def __str__(self):
+        response = 'task_thread: '
+        response += 'active' if self.task_thread and self.task_thread.isAlive() else 'stopped'
+        response += 'subscribers_thread: '
+        response += 'active' if self.subscribers_thread and self.subscribers_thread.isAlive() else 'stopped'
+
 
 
 
