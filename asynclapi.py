@@ -27,17 +27,19 @@ class TaskPool():
     def push_task(self, task):
         self.task_lock.acquire()
         self.tasks.append(task)
-        if not self.task_thread.isAlive():
-            self.task_thread = Thread(target=task_loop, daemon=False)
+        if not self.task_thread or not self.task_thread.isAlive():
+            self.task_thread = Thread(target=self.task_loop, daemon=False)
+            self.task_thread.start()
         self.task_lock.release()
     
     # добавление подписчика с колбэком, если всем подписчикам уже были отправлены сообщения и поток завершился,
     # создадим новый поток для рассылки подписчикам
     def push_subscriber(self, subscriber):
         self.subscribers_lock.acquire()
-        self.subscribers.append(subscriber)
-        if not self.subscribers_thread.isAlive():
-            self.subscribers_thread = Thread(target=inbox_loop, daemon=False)
+        self.subscribers[subscriber.code] = subscriber
+        if not self.subscribers_thread or not self.subscribers_thread.isAlive():
+            self.subscribers_thread = Thread(target=self.inbox_loop, daemon=False)
+            self.subscribers_thread.start()
         self.subscribers_lock.release()
     
     # мейнлуп для выполнения тасков
@@ -45,13 +47,13 @@ class TaskPool():
     # если таск это запрос, то обрабатываем его отдельно
     # если таск помечен как бесконечный, то в конце возвращаем его обратно в список тасков
     def task_loop(self):
-        while len(tasks):
+        while len(self.tasks):
             self.task_lock.acquire()
             cur_task = self.tasks.pop(0) # берем из начала
 
             if isinstance(cur_task, Push):
                 self.serial_lock.acquire()
-                self.serial_wrapper.push(cur_task.code, cur_task.args)
+                self.serial_wrapper.push(cur_task.code, list(cur_task.args[0]))
                 self.serial_lock.release()
             
             if isinstance(cur_task, Request):
@@ -66,7 +68,7 @@ class TaskPool():
     def process_request(self, request):
         self.serial_lock.acquire()
         self.push_subscriber(request)
-        self.serial_wrapper.push(request.code, request.args)
+        self.serial_wrapper.push(request.code, list(request.args[0]))
         self.serial_lock.release()
         
     # мейнлуп для ожидания входящих сообщений
@@ -76,7 +78,7 @@ class TaskPool():
         while len(self.subscribers):
             self.subscribers_lock.acquire() # тут один лок внутри другого, это плохо
             self.serial_lock.acquire()
-            response = json.loads(serial_wrapper.pull())
+            response = json.loads(self.serial_wrapper.pull())
             self.serial_lock.release()
             code = response.get('code', -1)
             if code == -1:
@@ -84,16 +86,20 @@ class TaskPool():
                 self.subscribers = []
                 break
             else:
-                target = subscribers.get(code, None)
+                target = self.subscribers.get(code, None)
                 if target: # в теории подписчик по-любому должен быть, но на всякий случай надо перестраховаться
-                    target.callback(response)
-                    subscribers.pop(code, None)
+                    if target.callback:
+                        target.callback(response)
+                    self.subscribers.pop(code, None)
                 
             self.subscribers_lock.release()
     
-    def reset():
+    def reset(self):
         self.subscribers = dict()
         self.tasks = list()
+        self.task_lock.release()
+        self.subscribers_lock.release()
+        self.serial_lock.release()
 
 
 

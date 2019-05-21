@@ -40,11 +40,12 @@ class Core:
 
 class Device:
 
-    task_pool = TaskPool()
+    task_pool = None
 
     # Экземпляр ардуинки пытается связаться по протоколу с тем deviceId, что ей дали
     def __init__(self, deviceId):
         self.serial = SerialWrapper(s.Serial(deviceId, BAUD_RATE), deviceId)
+        self.task_pool = TaskPool(self.serial)
         # рукопожатие (попытка соединиться с устройством)
         self.data = self.serial.handshake()
         
@@ -64,15 +65,16 @@ class Device:
     def push_async(self, code:int, *args, **kwargs):
         task = Push(code, args)
         task.is_infinite = kwargs.get('is_infinite', False)
-        task_pool.push_task(task)
+        self.task_pool.push_task(task)
     
-    def request_async(self, callback, code:int, *args, **kwargs):
+    def request_async(self, code:int, *args, **kwargs):
+        callback = kwargs.get('callback', None)
         task = Request(callback, code, args)
         task.is_infinite = kwargs.get('is_infinite', False)
-        task_pool.push_task(task)
+        self.task_pool.push_task(task)
 
     def reset(self):
-        task_pool.reset()
+        self.task_pool.reset()
 
 
 
@@ -86,6 +88,7 @@ class SerialWrapper:
 
     # перевод дробного числа в массив байт
     def decompose(self, number):
+        print(number)
         return bytes(struct.pack('f', number))
 
     # отправка стандартного сообщения на Arduino
