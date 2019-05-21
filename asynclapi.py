@@ -102,10 +102,11 @@ class TaskPool():
         if (self.serial_lock.locked()): self.serial_lock.release()
     
     def __str__(self):
-        response = 'task_thread: '
+        response =  '\n  task_thread: '
         response += 'active' if self.task_thread and self.task_thread.isAlive() else 'stopped'
-        response += 'subscribers_thread: '
+        response += '\n  subscribers_thread: '
         response += 'active' if self.subscribers_thread and self.subscribers_thread.isAlive() else 'stopped'
+        return response
 
 
 

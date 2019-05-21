@@ -13,16 +13,17 @@ from asynclapi import *
 BAUD_RATE = 115200
 KEKMECH_VERSION = '1.1'
 
-debug = True
+debug = False
 core = None
 
 
 
 def start():
+    global core
     core = Core()
 
 def status():
-    print('Core version %s'.format(KEKMECH_VERSION))
+    print('Core version {}'.format(KEKMECH_VERSION))
     for dev in core.devices:
         print(dev)
 
@@ -85,8 +86,8 @@ class Device:
         self.task_pool.reset()
 
     def __str__(self):
-        response =  '(Device \"%s\": '.format(self.id)
-        response += str(task_pool)
+        response =  '(Device \"{}\": '.format(self.id)
+        response += str(self.task_pool)
         response += ')'
         return response
 
