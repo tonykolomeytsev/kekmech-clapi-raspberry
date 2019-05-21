@@ -71,6 +71,9 @@ class Device:
         task.is_infinite = kwargs.get('is_infinite', False)
         task_pool.push_task(task)
 
+    def reset(self):
+        task_pool.reset()
+
 
 
 # обёртка для Serial

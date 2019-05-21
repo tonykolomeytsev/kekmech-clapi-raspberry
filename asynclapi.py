@@ -10,7 +10,7 @@ class TaskPool():
 
     task_thread = None
     subscribers_thread = None
-    tasks = []
+    tasks = list()
     subscribers = dict()
     task_lock = Lock()
     subscribers_lock = Lock()
@@ -90,6 +90,10 @@ class TaskPool():
                     subscribers.pop(code, None)
                 
             self.subscribers_lock.release()
+    
+    def reset():
+        self.subscribers = dict()
+        self.tasks = list()
 
 
 
