@@ -7,7 +7,8 @@ import struct
 import math
 import sys
 
-from threading import Thread
+from asynclapi import *
+
 
 BAUD_RATE = 115200
 
@@ -15,9 +16,9 @@ debug = True
 core = 0
 
 
+
 def start():
     core = Core()
-
 
 
 
@@ -29,7 +30,7 @@ class Core:
         # для UNO dev/ttyACM + для NANO dev/ttyUSB
         devices = ['/dev/ttyACM' + str(i) for i in range(0, 4)] + ['/dev/ttyUSB' + str(i) for i in range(0, 4)]
         # пытаемся подключиться к ним, как к ардуине и получаем список ардуин
-        activeDevices = map(lambda e: Arduino(e) if os.path.exists(e) else None, devices)
+        activeDevices = map(lambda e: Device(e) if os.path.exists(e) else None, devices)
         clapiModule = sys.modules[__name__]
         for d in activeDevices:
             if hasattr(d,'id'):
@@ -37,7 +38,10 @@ class Core:
 
 
 
-class Arduino:
+class Device:
+
+    task_pool = TaskPool()
+
     # Экземпляр ардуинки пытается связаться по протоколу с тем deviceId, что ей дали
     def __init__(self, deviceId):
         self.serial = SerialWrapper(s.Serial(deviceId, BAUD_RATE), deviceId)
@@ -52,10 +56,20 @@ class Arduino:
     
     def pull(self):
         return self.serial.pull()
-        
+    
     def request(self, code:int, *args):
         self.serial.push(code, args)
         return self.serial.pull()
+    
+    def push_async(self, code:int, *args, **kwargs):
+        task = Push(code, args)
+        task.is_infinite = kwargs.get('is_infinite', False)
+        task_pool.push_task(task)
+    
+    def request_async(self, callback, code:int, *args, **kwargs):
+        task = Request(callback, code, args)
+        task.is_infinite = kwargs.get('is_infinite', False)
+        task_pool.push_task(task)
 
 
 
