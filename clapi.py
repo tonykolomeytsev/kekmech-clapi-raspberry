@@ -12,6 +12,7 @@ from asynclapi import *
 
 BAUD_RATE = 115200
 KEKMECH_VERSION = '1.1'
+CMD_HANDSHAKE = 0x13
 
 debug = False
 core = None
@@ -134,5 +135,7 @@ class SerialWrapper:
 
     # установка соединения с Arduino
     def handshake(self):
+        if not self.serial.inWaiting():
+            self.serial.push(CMD_HANDSHAKE)
         line = self.pull()
         return json.loads(line)
