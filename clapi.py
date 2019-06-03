@@ -136,6 +136,6 @@ class SerialWrapper:
     # установка соединения с Arduino
     def handshake(self):
         if not self.serial.inWaiting():
-            self.serial.push(CMD_HANDSHAKE)
+            self.push(CMD_HANDSHAKE,[])
         line = self.pull()
         return json.loads(line)
