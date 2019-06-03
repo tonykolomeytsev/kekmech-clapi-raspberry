@@ -8,21 +8,20 @@ import json
 
 class TaskPool():
 
-    task_thread = None
-    subscribers_thread = None
-    tasks = list()
-    subscribers = dict()
-    task_lock = Lock()
-    subscribers_lock = Lock()
-    serial_lock = Lock()
+    task_thread = None # поток, отправляющий таски по очереди
+    subscribers_thread = None # поток, принимающий входящие сообщения и сообщающий о них подписчикам
+    tasks = list() # очередь из тасков
+    subscribers = dict() # список подписчиков (CODE -> LISTENER) где CODE - код команды, на которую ожидается ответ
+    task_lock = Lock() # локер для потокобезопасного обращения к списку тасков
+    subscribers_lock = Lock() # локер для потокобезопасного обращения к списку подписчиков
+    serial_lock = Lock() # локер для потокобезопасного обращения к экземпляру Serial
 
     def __init__(self, serial_wrapper):
         self.serial_wrapper = serial_wrapper
 
-    # главный входной метод, остальные лучше не запускать самостоятельно
-    # добавление таска на выполнение, если все таски уже были выполнены и поток завершился,
-    # создадим новый поток для выполнения тасков 
-    # скорее всего в продакшене будут использованы бесконечные таски, которые не удаляются, а значит и поток
+    # Добавление таска на выполнение. Главный входной метод, остальные лучше не запускать самостоятельно. 
+    # Если все таски уже были выполнены и поток завершился, создадим новый поток для выполнения тасков.
+    # Скорее всего в продакшене будут использованы бесконечные таски, которые не удаляются, а значит и поток
     # не будет завершаться
     def push_task(self, task):
         self.task_lock.acquire()
@@ -32,20 +31,24 @@ class TaskPool():
             self.task_thread.start()
         self.task_lock.release()
     
-    # добавление подписчика с колбэком, если всем подписчикам уже были отправлены сообщения и поток завершился,
-    # создадим новый поток для рассылки подписчикам
-    def push_subscriber(self, subscriber):
+    # Добавление подписчика с колбэком. 
+    # Если всем подписчикам уже были отправлены сообщения и поток завершился,
+    # создадим новый поток для рассылки
+    # Если подписчик с таким кодом уже дожидается сообщения в данный момент, то вернем True
+    def push_subscriber(self, subscriber) -> bool:
         self.subscribers_lock.acquire()
+        already_subscribed = (subscriber.code in self.subscribers) # вдруг ответа уже кто-то дожидается в данный момент
         self.subscribers[subscriber.code] = subscriber
         if not self.subscribers_thread or not self.subscribers_thread.isAlive():
             self.subscribers_thread = Thread(target=self.inbox_loop, daemon=False)
             self.subscribers_thread.start()
         self.subscribers_lock.release()
+        return already_subscribed
     
-    # мейнлуп для выполнения тасков
-    # если таск, это сообщение, то отправляем
-    # если таск это запрос, то обрабатываем его отдельно
-    # если таск помечен как бесконечный, то в конце возвращаем его обратно в список тасков
+    # Мейнлуп для выполнения тасков
+    # Если таск, это сообщение, то отправляем
+    # Если таск это запрос, то обрабатываем его отдельно в функции process_request()
+    # Если таск помечен как бесконечный, то в конце возвращаем его обратно в список тасков
     def task_loop(self):
         while len(self.tasks):
             self.task_lock.acquire()
@@ -60,15 +63,18 @@ class TaskPool():
                 self.process_request(cur_task)
             
             if cur_task.is_infinite:
-                self.tasks.append(cur_task) # добавляем в конец
+                self.tasks.append(cur_task) # добавляем в конец очереди
             self.task_lock.release()
     
-    # обработка поступившего в список тасков запроса
-    # реггистрируем подписчика и после этого шлем сообщение
+    # Обработка поступившего в список тасков запроса
+    # Регистрируем подписчика и после этого шлем команду
+    # Если ранее была отправлена команда, на которую не пришел ответ, то подписчика
+    # нового регистрируем вместо старого, но повторно команду не отправляем (ибо если уж зависать, так навсегда)
     def process_request(self, request):
         self.serial_lock.acquire()
-        self.push_subscriber(request)
-        self.serial_wrapper.push(request.code, list(request.args[0]))
+        already_subscribed = self.push_subscriber(request)
+        if not already_subscribed:
+            self.serial_wrapper.push(request.code, list(request.args[0]))
         self.serial_lock.release()
         
     # мейнлуп для ожидания входящих сообщений
@@ -102,10 +108,15 @@ class TaskPool():
         if (self.serial_lock.locked()): self.serial_lock.release()
     
     def __str__(self):
-        response =  '\n  task_thread: '
+        response =  '\n\n  task_thread: '
         response += 'active' if self.task_thread and self.task_thread.isAlive() else 'stopped'
-        response += '\n  subscribers_thread: '
+        for t in self.tasks:
+            response += "\n[task] {}".format(t)
+        
+        response += '\n\n  subscribers_thread: '
         response += 'active' if self.subscribers_thread and self.subscribers_thread.isAlive() else 'stopped'
+        for s in self.subscribers:
+            response += "\n[subscriber] {}".format(s)
         return response
 
 
@@ -121,12 +132,18 @@ class Push(Task):
     def __init__(self, code:int, *args):
         self.code = code
         self.args = args
+    
+    def __str__(self):
+        return "push {} with args {}".format(self.code, str(self.args))
 
 class Request(Task):
     def __init__(self, callback, code:int, *args):
         self.code = code
         self.callback = callback
         self.args = args
+    
+    def __str__(self):
+        return "request {} with args {} callback {}".format(self.code, str(self.args), str(self.callback))
 
 
         
