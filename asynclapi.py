@@ -31,7 +31,7 @@ class TaskPool():
         # если поток по каким-то причинам мертв, то создадим и запустим его
         if not self.main_thread or not self.main_thread.isAlive():
             self.main_thread = Thread(target=self.main_loop, daemon=False)
-            self.main_thread.start()
+            #self.main_thread.start()
         self.task_lock.release()
 
     # Добавление подписчика (слушателя) входящих сообщений
@@ -45,9 +45,9 @@ class TaskPool():
     def main_loop(self):
         while True:
             # принимаем все входящие сообщения
-            process_input()
+            self.process_input()
             if len(self.tasks):
-                process_output()
+                self.process_output()
             else:
                 time.sleep(0) # аналог thread.yield() в других языках
     
@@ -107,6 +107,10 @@ class TaskPool():
 class Task():
     _code = None
     _args = None
+
+    def __init__(self, control_code, *control_args):
+        self._code = control_code
+        self._args = control_args
 
     def code(self, control_code:int):
         self._code = control_code
