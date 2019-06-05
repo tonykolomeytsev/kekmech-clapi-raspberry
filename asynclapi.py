@@ -1,5 +1,13 @@
+"""
+Дополнение к библиотеке Clapi, добавляющее асинхронные запросы к устройствам.
+Внешний вид API максимально приближен к API запросов HTTP.
+Прямой вызов функций и классов из этого файла предусмотрен только для дебага,
+для всех остальных случаев лучше использовать Clapi, который всё сделает за вас.
+"""
+
 from threading import Thread, Lock
 import json
+import time
 
 # должна быть очередь из тасков, которые отправляются на МК. При этом некоторые таски не удаляются после выполнения
 # например таск опроса дальномеров работает все время и только между запросами на дальномеры будут отправляться другие команды
@@ -8,113 +16,82 @@ import json
 
 class TaskPool():
 
-    task_thread = None # поток, отправляющий таски по очереди
-    subscribers_thread = None # поток, принимающий входящие сообщения и сообщающий о них подписчикам
+    main_thread = None # поток, отправляющий таски по очереди
     tasks = list() # очередь из тасков
     subscribers = dict() # список подписчиков (CODE -> LISTENER) где CODE - код команды, на которую ожидается ответ
     task_lock = Lock() # локер для потокобезопасного обращения к списку тасков
-    subscribers_lock = Lock() # локер для потокобезопасного обращения к списку подписчиков
-    serial_lock = Lock() # локер для потокобезопасного обращения к экземпляру Serial
 
     def __init__(self, serial_wrapper):
         self.serial_wrapper = serial_wrapper
 
-    # Добавление таска на выполнение. Главный входной метод, остальные лучше не запускать самостоятельно. 
-    # Если все таски уже были выполнены и поток завершился, создадим новый поток для выполнения тасков.
-    # Скорее всего в продакшене будут использованы бесконечные таски, которые не удаляются, а значит и поток
-    # не будет завершаться
+    # Добавление таска на выполнение. 
     def push_task(self, task):
         self.task_lock.acquire()
         self.tasks.append(task)
-        if not self.task_thread or not self.task_thread.isAlive():
-            self.task_thread = Thread(target=self.task_loop, daemon=False)
-            self.task_thread.start()
+        # если поток по каким-то причинам мертв, то создадим и запустим его
+        if not self.main_thread or not self.main_thread.isAlive():
+            self.main_thread = Thread(target=self.main_loop, daemon=False)
+            self.main_thread.start()
+        self.task_lock.release()
+
+    # Добавление подписчика (слушателя) входящих сообщений
+    def push_subscriber(self, s:Task):
+        self.task_lock.acquire()
+        self.subscribers[s.code] = s
         self.task_lock.release()
     
-    # Добавление подписчика с колбэком. 
-    # Если всем подписчикам уже были отправлены сообщения и поток завершился,
-    # создадим новый поток для рассылки
-    # Если подписчик с таким кодом уже дожидается сообщения в данный момент, то вернем True
-    def push_subscriber(self, subscriber) -> bool:
-        self.subscribers_lock.acquire()
-        already_subscribed = (subscriber.code in self.subscribers) # вдруг ответа уже кто-то дожидается в данный момент
-        self.subscribers[subscriber.code] = subscriber
-        if not self.subscribers_thread or not self.subscribers_thread.isAlive():
-            self.subscribers_thread = Thread(target=self.inbox_loop, daemon=False)
-            self.subscribers_thread.start()
-        self.subscribers_lock.release()
-        return already_subscribed
-    
     # Мейнлуп для выполнения тасков
-    # Если таск, это сообщение, то отправляем
-    # Если таск это запрос, то обрабатываем его отдельно в функции process_request()
-    # Если таск помечен как бесконечный, то в конце возвращаем его обратно в список тасков
-    def task_loop(self):
-        while len(self.tasks):
-            self.task_lock.acquire()
-            cur_task = self.tasks.pop(0) # берем из начала
-
-            if isinstance(cur_task, Push):
-                self.serial_lock.acquire()
-                self.serial_wrapper.push(cur_task.code, list(cur_task.args[0]))
-                self.serial_lock.release()
-            
-            if isinstance(cur_task, Request):
-                self.process_request(cur_task)
-            
-            if cur_task.is_infinite:
-                self.tasks.append(cur_task) # добавляем в конец очереди
-            self.task_lock.release()
+    # Сначала обрабатываем входящие сообщения, потом отправляем
+    def main_loop(self):
+        while True:
+            # принимаем все входящие сообщения
+            process_input()
+            if len(self.tasks):
+                process_output()
+            else:
+                time.sleep(0) # аналог thread.yield() в других языках
     
-    # Обработка поступившего в список тасков запроса
-    # Регистрируем подписчика и после этого шлем команду
-    # Если ранее была отправлена команда, на которую не пришел ответ, то подписчика
-    # нового регистрируем вместо старого, но повторно команду не отправляем (ибо если уж зависать, так навсегда)
-    def process_request(self, request):
-        self.serial_lock.acquire()
-        already_subscribed = self.push_subscriber(request)
-        #if not already_subscribed:
-        self.serial_wrapper.push(request.code, list(request.args[0]))
-        self.serial_lock.release()
-        
-    # мейнлуп для ожидания входящих сообщений
-    # входящих сообщений не может прийти больше, чем зарегистрировано подписчиков (в том случае если все работает правильно)
-    # если сообщение пришло без идентификационного номера (номер команды, на которую отвечают), то ВСЁ ПЛОХО
-    def inbox_loop(self):
-        while len(self.subscribers):
-            self.subscribers_lock.acquire() # тут один лок внутри другого, это плохо
-            self.serial_lock.acquire()
+    # Обрабатываем все входящие сообщения.
+    # Если пришел ответ на LongPoll, сообщаем о нем подписчику и заново добавляем LongPoll в список тасков
+    def process_input(self):
+        while self.serial_wrapper.serial.inWaiting():
             response = json.loads(self.serial_wrapper.pull())
-            self.serial_lock.release()
             code = response.get('code', -1)
             if code == -1:
                 print('Response to the void (response without CODE):', response) # отвечать без идентификационного номера нельзя
-                self.subscribers = []
-                break
             else:
                 target = self.subscribers.get(code, None)
                 if target: # в теории подписчик по-любому должен быть, но на всякий случай надо перестраховаться
-                    if target.callback:
+                    if target.callback: # в теории по-любому будет callback, но мы то знаем ;)
                         target.callback(response)
                     self.subscribers.pop(code, None)
-                
-            self.subscribers_lock.release()
-    
+                    if isinstance(target, LongPoll): # если выполненный таск был long-poll, то заново добавляем его в список тасков
+                        push_task(target)
+
+    # Берем из начала очереди таск, делаем с ним что нужно. В очередь никого не возвращаем.
+    # LongPoll будет возвращен в очередь в методе process_input() после того как на этот таск придет ответ.
+    def process_output(self):
+        self.task_lock.acquire()
+        cur_task = self.tasks.pop(0) # берем из начала
+        self.task_lock.release()
+
+        if isinstance(cur_task, Push):
+            self.serial_wrapper.push(cur_task.code, list(cur_task.args[0]))
+        
+        if isinstance(cur_task, Request) or isinstance(cur_task, LongPoll):
+            self.push_subscriber(cur_task) # добавляем подписчика
+            self.serial_wrapper.push(cur_task.code, list(cur_task.args[0]))
+
     def reset(self):
         self.subscribers = dict()
         self.tasks = list()
         if (self.task_lock.locked()): self.task_lock.release()
-        if (self.subscribers_lock.locked()): self.subscribers_lock.release()
-        if (self.serial_lock.locked()): self.serial_lock.release()
     
     def __str__(self):
-        response =  '\n\n  task_thread: '
-        response += 'active' if self.task_thread and self.task_thread.isAlive() else 'stopped'
+        response =  '\n\n  main_thread: '
+        response += 'active' if self.main_thread and self.main_thread.isAlive() else 'stopped'
         for t in self.tasks:
             response += "\n[task] {}".format(t)
-        
-        response += '\n\n  subscribers_thread: '
-        response += 'active' if self.subscribers_thread and self.subscribers_thread.isAlive() else 'stopped'
         for s in self.subscribers.itervalues():
             response += "\n[subscriber] {}".format(s)
         return response
