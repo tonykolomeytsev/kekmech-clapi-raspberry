@@ -73,8 +73,8 @@ class TaskPool():
     def process_request(self, request):
         self.serial_lock.acquire()
         already_subscribed = self.push_subscriber(request)
-        if not already_subscribed:
-            self.serial_wrapper.push(request.code, list(request.args[0]))
+        #if not already_subscribed:
+        self.serial_wrapper.push(request.code, list(request.args[0]))
         self.serial_lock.release()
         
     # мейнлуп для ожидания входящих сообщений
@@ -88,7 +88,7 @@ class TaskPool():
             self.serial_lock.release()
             code = response.get('code', -1)
             if code == -1:
-                print('Response to the void:', response) # отвечать без идентификационного номера нельзя
+                print('Response to the void (response without CODE):', response) # отвечать без идентификационного номера нельзя
                 self.subscribers = []
                 break
             else:
@@ -115,38 +115,54 @@ class TaskPool():
         
         response += '\n\n  subscribers_thread: '
         response += 'active' if self.subscribers_thread and self.subscribers_thread.isAlive() else 'stopped'
-        for s in self.subscribers:
+        for s in self.subscribers.itervalues():
             response += "\n[subscriber] {}".format(s)
         return response
 
 
 
-
 class Task():
+    _code = None
+    _args = None
+
+    def code(self, control_code:int):
+        self._code = control_code
+        return self
+
+    def args(self, *control_args):
+        self._args = control_args[0]
+        return self
     
-    is_infinite=False
+    def execute(self):
+        return self
 
 
-        
+
 class Push(Task):
-    def __init__(self, code:int, *args):
-        self.code = code
-        self.args = args
-    
     def __str__(self):
         return "push {} with args {}".format(self.code, str(self.args))
 
-class Request(Task):
-    def __init__(self, callback, code:int, *args):
-        self.code = code
-        self.callback = callback
-        self.args = args
+
+
+class CallbackTask(Task):
+    _callback = None
+
+    def callback(self, control_callback):
+        self._callback = control_callback
+        return self
     
+    def execute_async(self):
+        return self
+
+
+
+class Request(CallbackTask):
     def __str__(self):
-        return "request {} with args {} callback {}".format(self.code, str(self.args), str(self.callback))
+        return "request {} with args {} callback {}".format(self._code, str(self._args), str(self._callback))
 
 
+
+class LongPoll(CallbackTask):
+    def __str__(self):
+        return "long-poll {} with args {} callback {}".format(self._code, str(self._args), str(self._callback))
         
-
-
-
