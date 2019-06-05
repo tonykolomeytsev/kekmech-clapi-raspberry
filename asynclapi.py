@@ -107,6 +107,7 @@ class TaskPool():
 class Task():
     _code = None
     _args = None
+    _executor = None
 
     def __init__(self, control_code, *control_args):
         self._code = control_code
@@ -121,7 +122,8 @@ class Task():
         return self
     
     def execute(self):
-        return self
+        if self._executor:
+            self._executor(self)
 
 
 
@@ -136,9 +138,6 @@ class CallbackTask(Task):
 
     def callback(self, control_callback):
         self._callback = control_callback
-        return self
-    
-    def execute_async(self):
         return self
 
 
