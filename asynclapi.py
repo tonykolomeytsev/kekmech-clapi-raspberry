@@ -35,9 +35,9 @@ class TaskPool():
         self.task_lock.release()
 
     # Добавление подписчика (слушателя) входящих сообщений
-    def push_subscriber(self, s:Task):
+    def push_subscriber(self, s):
         self.task_lock.acquire()
-        self.subscribers[s.code] = s
+        self.subscribers[s._code] = s
         self.task_lock.release()
     
     # Мейнлуп для выполнения тасков
@@ -54,7 +54,7 @@ class TaskPool():
     # Обрабатываем все входящие сообщения.
     # Если пришел ответ на LongPoll, сообщаем о нем подписчику и заново добавляем LongPoll в список тасков
     def process_input(self):
-        while self.serial_wrapper.serial.inWaiting():
+        while self.serial_wrapper.inWaiting():
             response = json.loads(self.serial_wrapper.pull())
             code = response.get('code', -1)
             if code == -1:
@@ -62,11 +62,11 @@ class TaskPool():
             else:
                 target = self.subscribers.get(code, None)
                 if target: # в теории подписчик по-любому должен быть, но на всякий случай надо перестраховаться
-                    if target.callback: # в теории по-любому будет callback, но мы то знаем ;)
-                        target.callback(response)
+                    if target._callback: # в теории по-любому будет callback, но мы то знаем ;)
+                        target._callback(response)
                     self.subscribers.pop(code, None)
                     if isinstance(target, LongPoll): # если выполненный таск был long-poll, то заново добавляем его в список тасков
-                        push_task(target)
+                        self.push_task(target)
 
     # Берем из начала очереди таск, делаем с ним что нужно. В очередь никого не возвращаем.
     # LongPoll будет возвращен в очередь в методе process_input() после того как на этот таск придет ответ.
@@ -76,11 +76,11 @@ class TaskPool():
         self.task_lock.release()
 
         if isinstance(cur_task, Push):
-            self.serial_wrapper.push(cur_task.code, list(cur_task.args[0]))
+            self.serial_wrapper.push(cur_task._code, list(cur_task._args))
         
         if isinstance(cur_task, Request) or isinstance(cur_task, LongPoll):
             self.push_subscriber(cur_task) # добавляем подписчика
-            self.serial_wrapper.push(cur_task.code, list(cur_task.args[0]))
+            self.serial_wrapper.push(cur_task._code, list(cur_task._args))
 
     def reset(self):
         self.subscribers = dict()
@@ -88,12 +88,18 @@ class TaskPool():
         if (self.task_lock.locked()): self.task_lock.release()
     
     def __str__(self):
-        response =  '\n\n  main_thread: '
+        response =  '\nmain_thread: '
         response += 'active' if self.main_thread and self.main_thread.isAlive() else 'stopped'
-        for t in self.tasks:
-            response += "\n[task] {}".format(t)
-        for s in self.subscribers.itervalues():
-            response += "\n[subscriber] {}".format(s)
+        if len(self.tasks):
+            for t in self.tasks:
+                response += "\n[task] {}".format(t)
+        else:
+            response += "\nno tasks"
+        if len(self.subscribers):
+            for s in self.subscribers.values():
+                response += "\n[subscriber] {}".format(s)
+        else:
+            response += "\nno subscribers"
         return response
 
 
@@ -107,7 +113,7 @@ class Task():
         return self
 
     def args(self, *control_args):
-        self._args = control_args[0]
+        self._args = control_args
         return self
     
     def execute(self):
@@ -117,7 +123,7 @@ class Task():
 
 class Push(Task):
     def __str__(self):
-        return "push {} with args {}".format(self.code, str(self.args))
+        return "Push(code={}, args={})".format(self._code, str(self._args))
 
 
 
@@ -135,11 +141,11 @@ class CallbackTask(Task):
 
 class Request(CallbackTask):
     def __str__(self):
-        return "request {} with args {} callback {}".format(self._code, str(self._args), str(self._callback))
+        return "Request(code={}, args={}, callback={})".format(self._code, str(self._args), str(self._callback))
 
 
 
 class LongPoll(CallbackTask):
     def __str__(self):
-        return "long-poll {} with args {} callback {}".format(self._code, str(self._args), str(self._callback))
+        return "LongPoll(code={}, args={}, callback={})".format(self._code, str(self._args), str(self._callback))
         

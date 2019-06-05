@@ -133,6 +133,9 @@ class SerialWrapper:
             print('pull', self.deviceId, '<<', response)
         return response
 
+    def inWaiting(self):
+        return self.serial.inWaiting()
+
     # установка соединения с Arduino
     def handshake(self):
         if not self.serial.inWaiting():
