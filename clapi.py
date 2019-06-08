@@ -74,17 +74,17 @@ class Device:
     
     def push_async(self, code:int, *args):
         task = Push(code, *args)
-        task._executor = task_pool.push_task
+        task._executor = self.task_pool.push_task
         return task
     
     def request_async(self, code:int, *args):
         task = Request(code, *args)
-        task._executor = task_pool.push_task
+        task._executor = self.task_pool.push_task
         return task
         
     def long_poll_async(self, code:int, *args):
         task = LongPoll(code, *args)
-        task._executor = task_pool.push_task
+        task._executor = self.task_pool.push_task
         return task
 
     def reset(self):
