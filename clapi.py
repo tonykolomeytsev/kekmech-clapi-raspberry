@@ -72,16 +72,20 @@ class Device:
         self.serial.push(code, args)
         return self.serial.pull()
     
-    def push_async(self, code:int, *args, **kwargs):
-        task = Push(code, args)
-        task.is_infinite = kwargs.get('is_infinite', False)
-        self.task_pool.push_task(task)
+    def push_async(self, code:int, *args):
+        task = Push(code, *args)
+        task._executor = task_pool.push_task
+        return task
     
-    def request_async(self, code:int, *args, **kwargs):
-        callback = kwargs.get('callback', None)
-        task = Request(callback, code, args)
-        task.is_infinite = kwargs.get('is_infinite', False)
-        self.task_pool.push_task(task)
+    def request_async(self, code:int, *args):
+        task = Request(code, *args)
+        task._executor = task_pool.push_task
+        return task
+        
+    def long_poll_async(self, code:int, *args):
+        task = LongPoll(code, *args)
+        task._executor = task_pool.push_task
+        return task
 
     def reset(self):
         self.task_pool.reset()
@@ -132,6 +136,9 @@ class SerialWrapper:
         if debug:
             print('pull', self.deviceId, '<<', response)
         return response
+
+    def inWaiting(self):
+        return self.serial.inWaiting()
 
     # установка соединения с Arduino
     def handshake(self):
