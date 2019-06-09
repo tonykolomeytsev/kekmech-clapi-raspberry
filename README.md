@@ -2,6 +2,10 @@
 
 A library for transferring data between Raspberry Pi, Arduino and STM32 Nucleo using Serial. The library is designed to work with [Clapi Arduino](https://github.com/tonykolomeytsev/kekmech-clapi-arduino) or [Clapi Nucleo](https://github.com/tonykolomeytsev/kekmech-clapi-nucleo).
 
+![alt text](https://raw.githubusercontent.com/tonykolomeytsev/kekmech-clapi-raspberry/master/img.png)
+
+Visit the wiki page to understand how it works.
+
 ## Features
 
 * Sending commands in the binary format (quickly parsed on the microcontroller)
@@ -13,8 +17,9 @@ Just import the library and call the start() function.
 ```
 import clapi as api
 
-# setting up a connection with all arduinos connected via USB
+# setting up a connection with all devices connected via USB
 api.start()
+api.status() # shows all connected devices
 ```
 
 After that, you can send commands to microcontrollers. When the connection is established, arduino sends us its **device_id**. If first arduino sent us ```{device_id: 'test'}``` and the second arduino sent ```{device_id: 'foo'}```, then we can send the command as follows:
