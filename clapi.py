@@ -66,7 +66,7 @@ class Device:
         self.serial.push(code, args)
     
     def pull(self):
-        return self.serial.pull()
+        return json.loads(self.serial.pull())
     
     def request(self, code:int, *args):
         self.serial.push(code, args)
