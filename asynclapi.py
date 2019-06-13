@@ -31,7 +31,7 @@ class TaskPool():
         # если поток по каким-то причинам мертв, то создадим и запустим его
         if not self.main_thread or not self.main_thread.isAlive():
             self.main_thread = Thread(target=self.main_loop, daemon=False)
-            #self.main_thread.start()
+            self.main_thread.start()
         self.task_lock.release()
 
     # Добавление подписчика (слушателя) входящих сообщений
