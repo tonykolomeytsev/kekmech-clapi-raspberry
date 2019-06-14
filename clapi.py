@@ -31,8 +31,6 @@ def status():
 
 class Core:
 
-    devices = list()
-
     # Связываемся со всеми подключенными ардуинками
     def __init__(self):
         # получаем список подключённых по USB устройств
@@ -41,6 +39,7 @@ class Core:
         # пытаемся подключиться к ним, как к ардуине и получаем список ардуин
         activeDevices = map(lambda e: Device(e) if os.path.exists(e) else None, devices)
         clapiModule = sys.modules[__name__]
+        self.devices = list()
         for d in activeDevices:
             if hasattr(d,'id'):
                 setattr(clapiModule, str(d.id), d)
@@ -49,8 +48,6 @@ class Core:
 
 
 class Device:
-
-    task_pool = None
 
     # Экземпляр ардуинки пытается связаться по протоколу с тем deviceId, что ей дали
     def __init__(self, deviceId):

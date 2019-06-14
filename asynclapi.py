@@ -16,14 +16,13 @@ import time
 
 class TaskPool():
 
-    running = True
-    main_thread = None # поток, отправляющий таски по очереди
-    tasks = list() # очередь из тасков
-    subscribers = dict() # список подписчиков (CODE -> LISTENER) где CODE - код команды, на которую ожидается ответ
-    task_lock = Lock() # локер для потокобезопасного обращения к списку тасков
-
     def __init__(self, serial_wrapper):
         self.serial_wrapper = serial_wrapper
+        self.running = True
+        self.main_thread = None # поток, отправляющий таски по очереди
+        self.tasks = list() # очередь из тасков
+        self.subscribers = dict() # список подписчиков (CODE -> LISTENER) где CODE - код команды, на которую ожидается ответ
+        self.task_lock = Lock() # локер для потокобезопасного обращения к списку тасков
 
     # Добавление таска на выполнение. 
     def push_task(self, task):
@@ -31,7 +30,7 @@ class TaskPool():
         self.tasks.append(task)
         # если поток по каким-то причинам мертв, то создадим и запустим его
         if not self.main_thread or not self.main_thread.isAlive():
-            self.main_thread = Thread(target=self.main_loop, daemon=True) # daemon=True for force terminating
+            self.main_thread = Thread(target=self.main_loop, daemon=False) # daemon=True for force terminating
             self.main_thread.start()
         self.task_lock.release()
 
@@ -42,7 +41,7 @@ class TaskPool():
     # Мейнлуп для выполнения тасков
     # Сначала обрабатываем входящие сообщения, потом отправляем
     def main_loop(self):
-        while True:
+        while self.running:
             self.task_lock.acquire()
             # принимаем все входящие сообщения
             self.process_input()
@@ -104,13 +103,11 @@ class TaskPool():
 
 
 class Task():
-    _code = None
-    _args = None
-    _executor = None
 
     def __init__(self, control_code, *control_args):
         self._code = control_code
         self._args = control_args
+        self._executor = None
 
     def code(self, control_code:int):
         self._code = control_code
@@ -127,13 +124,16 @@ class Task():
 
 
 class Push(Task):
+
     def __str__(self):
         return "Push(code={}, args={})".format(self._code, str(self._args))
 
 
 
 class CallbackTask(Task):
-    _callback = None
+    
+    def __init__(self):
+        self._callback = None
 
     def callback(self, control_callback):
         self._callback = control_callback
