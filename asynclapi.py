@@ -16,6 +16,7 @@ import time
 
 class TaskPool():
 
+    running = True
     main_thread = None # поток, отправляющий таски по очереди
     tasks = list() # очередь из тасков
     subscribers = dict() # список подписчиков (CODE -> LISTENER) где CODE - код команды, на которую ожидается ответ
@@ -30,7 +31,7 @@ class TaskPool():
         self.tasks.append(task)
         # если поток по каким-то причинам мертв, то создадим и запустим его
         if not self.main_thread or not self.main_thread.isAlive():
-            self.main_thread = Thread(target=self.main_loop, daemon=False)
+            self.main_thread = Thread(target=self.main_loop, daemon=True) # daemon=True for force terminating
             self.main_thread.start()
         self.task_lock.release()
 
@@ -43,7 +44,7 @@ class TaskPool():
     # Мейнлуп для выполнения тасков
     # Сначала обрабатываем входящие сообщения, потом отправляем
     def main_loop(self):
-        while True:
+        while self.running:
             # принимаем все входящие сообщения
             self.process_input()
             if len(self.tasks):

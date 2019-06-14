@@ -70,7 +70,7 @@ class Device:
     
     def request(self, code:int, *args):
         self.serial.push(code, args)
-        return self.serial.pull()
+        return json.loads(self.serial.pull())
     
     def push_async(self, code:int, *args):
         task = Push(code, *args)
