@@ -36,20 +36,20 @@ class TaskPool():
 
     # Добавление подписчика (слушателя) входящих сообщений
     def push_subscriber(self, s):
-        self.task_lock.acquire()
         self.subscribers[s._code] = s
-        self.task_lock.release()
     
     # Мейнлуп для выполнения тасков
     # Сначала обрабатываем входящие сообщения, потом отправляем
     def main_loop(self):
         while True:
+            self.task_lock.acquire()
             # принимаем все входящие сообщения
             self.process_input()
             if len(self.tasks):
                 self.process_output()
             else:
                 time.sleep(0) # аналог thread.yield() в других языках
+            self.task_lock.release()
     
     # Обрабатываем все входящие сообщения.
     # Если пришел ответ на LongPoll, сообщаем о нем подписчику и заново добавляем LongPoll в список тасков
@@ -71,9 +71,7 @@ class TaskPool():
     # Берем из начала очереди таск, делаем с ним что нужно. В очередь никого не возвращаем.
     # LongPoll будет возвращен в очередь в методе process_input() после того как на этот таск придет ответ.
     def process_output(self):
-        self.task_lock.acquire()
         cur_task = self.tasks.pop(0) # берем из начала
-        self.task_lock.release()
 
         if isinstance(cur_task, Push):
             self.serial_wrapper.push(cur_task._code, list(cur_task._args))
