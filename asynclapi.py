@@ -23,6 +23,7 @@ class TaskPool():
         self.tasks = list() # очередь из тасков
         self.subscribers = dict() # список подписчиков (CODE -> LISTENER) где CODE - код команды, на которую ожидается ответ
         self.task_lock = Lock() # локер для потокобезопасного обращения к списку тасков
+        self.inbox = dict()
 
     # Добавление таска на выполнение. 
     def push_task(self, task):
@@ -54,6 +55,17 @@ class TaskPool():
     # Обрабатываем все входящие сообщения.
     # Если пришел ответ на LongPoll, сообщаем о нем подписчику и заново добавляем LongPoll в список тасков
     def process_input(self):
+        # TRY TO PRESERVE MESSAGES LOST
+        for code, message in self.inbox.items():
+            target = self.subscribers.get(code, None)
+            if target:
+                if target._callback: # в теории по-любому будет callback, но мы то знаем ;)
+                    target._callback(message)
+                self.subscribers.pop(code, None)
+                self.inbox.pop(code, None)
+                if isinstance(target, LongPoll): # если выполненный таск был long-poll, то заново добавляем его в список тасков
+                    self.push_task(target)
+
         while self.serial_wrapper.inWaiting():
             response = json.loads(self.serial_wrapper.pull())
             code = response.get('code', -1)
@@ -67,6 +79,8 @@ class TaskPool():
                     self.subscribers.pop(code, None)
                     if isinstance(target, LongPoll): # если выполненный таск был long-poll, то заново добавляем его в список тасков
                         self.push_task(target)
+                else: # чтобы не потерять входящее сообщение, сохраним его
+                    self.inbox[code] = response
 
     # Берем из начала очереди таск, делаем с ним что нужно. В очередь никого не возвращаем.
     # LongPoll будет возвращен в очередь в методе process_input() после того как на этот таск придет ответ.
@@ -132,7 +146,10 @@ class Push(Task):
 
 class CallbackTask(Task):
     
-    def __init__(self):
+    def __init__(self, control_code, *control_args):
+        self._code = control_code
+        self._args = control_args
+        self._executor = None
         self._callback = None
 
     def callback(self, control_callback):

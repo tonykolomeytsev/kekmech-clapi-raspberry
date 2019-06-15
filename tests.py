@@ -59,7 +59,7 @@ class Device_Mock(api.Device):
         self.task_pool = TaskPool(self.serial)
         self.id = id
 
-
+test_async_request_var = 0
 class ClapiTest(unittest.TestCase):
     """ Clapi functions test """
 
@@ -170,7 +170,6 @@ class ClapiTest(unittest.TestCase):
         p2.execute()
 
         time.sleep(0.2) # wait main_loop thread of each device
-        print(s1.last_push, s2.last_push)
         
         api.dev1.task_pool.running = False
         api.dev2.task_pool.running = False
@@ -188,6 +187,59 @@ class ClapiTest(unittest.TestCase):
         self.assertTrue(len(tp1.subscribers.items()) == 0)
         self.assertTrue(len(tp2.subscribers.items()) == 0)
         
+    def test_async_request(self):
+        """test ASYNC request"""
+        print(self.id)
+        args = [25, 2]
+        s1 = api.dev1.serial
+        s2 = api.dev2.serial
+        tp1 = api.dev1.task_pool
+        tp2 = api.dev2.task_pool
+
+        def simple_callback(data):
+            global test_async_request_var
+            if data["code"] == 4:
+                test_async_request_var += 1
+            if data["code"] == 5:
+                test_async_request_var += 2
+        
+        try:
+            p1=api.dev1.request_async(4)\
+                .args(*args)\
+                .callback(simple_callback)
+                #.execute()
+            p2=api.dev2.request_async(5)\
+                .args(*args)\
+                .callback(simple_callback)
+                #.execute()
+        except:
+            self.fail("Something went wrong with sync REQUEST")
+
+
+        p1.execute()
+        p2.execute()
+
+        time.sleep(0.2) # wait main_loop thread stops
+
+        s1.data = '{"code":4}'
+        s2.data = '{"code":5}'
+
+        time.sleep(0.2) # wait main_loop thread stops
+        
+        api.dev1.task_pool.running = False
+        api.dev2.task_pool.running = False
+
+        time.sleep(0.2) # wait main_loop thread stops
+
+        self.assertEqual(test_async_request_var, 3)
+        if tp1.main_thread:
+            self.assertFalse(tp1.main_thread.isAlive())
+        if tp2.main_thread:
+            self.assertFalse(tp2.main_thread.isAlive())
+        self.assertTrue(len(tp1.tasks) == 0)
+        self.assertTrue(len(tp2.tasks) == 0)
+        self.assertTrue(len(tp1.subscribers.items()) == 0)
+        self.assertTrue(len(tp2.subscribers.items()) == 0)
 
 
 if __name__=="__main__":
