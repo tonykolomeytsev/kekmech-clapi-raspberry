@@ -3,6 +3,8 @@ import clapi as api
 import unittest
 import time
 
+
+
 # Mock for SerialWrapper
 class SerialWrapper_Mock:
 
@@ -59,8 +61,11 @@ class Device_Mock(api.Device):
         self.task_pool = TaskPool(self.serial)
         self.id = id
 
+
+
+
 test_async_request_var = 0
-class ClapiTest(unittest.TestCase):
+class ClapiFunctionalTest(unittest.TestCase):
     """ Clapi functions test """
 
     @classmethod
@@ -240,6 +245,7 @@ class ClapiTest(unittest.TestCase):
         self.assertTrue(len(tp2.tasks) == 0)
         self.assertTrue(len(tp1.subscribers.items()) == 0)
         self.assertTrue(len(tp2.subscribers.items()) == 0)
+
 
 
 if __name__=="__main__":
