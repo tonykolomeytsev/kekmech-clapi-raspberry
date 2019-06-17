@@ -2,56 +2,48 @@
 
 A library for transferring data between Raspberry Pi, Arduino and STM32 Nucleo using Serial. The library is designed to work with [Clapi Arduino](https://github.com/tonykolomeytsev/kekmech-clapi-arduino) or [Clapi Nucleo](https://github.com/tonykolomeytsev/kekmech-clapi-nucleo).
 
+![alt text](https://raw.githubusercontent.com/tonykolomeytsev/kekmech-clapi-raspberry/master/img.png)
+
+Visit the [wiki](https://github.com/tonykolomeytsev/kekmech-clapi-raspberry/wiki) page to understand how it works.
+
 ## Features
 
 * Sending commands in the binary format (quickly parsed on the microcontroller)
+* Communication with each device occurs in a separate thread.
+
+## How to install
+
+Clone or [download](https://github.com/tonykolomeytsev/kekmech-clapi-raspberry/archive/master.zip) the project to your local computer (raspberry?) and in the root project folder run the command:
+
+```
+sudo python3 setup.py install
+```
 
 ## Using
 
 Just import the library and call the start() function.
 
-```
+```python
 import clapi as api
 
-# setting up a connection with all arduinos connected via USB
+# setting up a connection with all devices connected via USB
 api.start()
+api.status() # shows all connected devices
 ```
 
-After that, you can send commands to microcontrollers. When the connection is established, arduino sends us its **device_id**. If first arduino sent us ```{device_id: 'test'}``` and the second arduino sent ```{device_id: 'foo'}```, then we can send the command as follows:
+After that, you can send commands to microcontrollers. When the connection is established, arduino sends us its **device_id**. If first arduino sent us ```{device_id: 'dev1'}``` and the second arduino sent ```{device_id: 'dev2'}```, then we can control them as follows:
 
-```
+```python
 # send the command to the first arduino
 # command "1" with two arguments: 2 and 3 
-api.test.push(1, 2, 3)
+api.dev1.push(1, 2, 3)
 
-api.test.pull() # waiting for response from first arduino
+answer = api.dev1.pull() # waiting for response from first arduino
+print(answer)
 
-api.foo.request(5) # request to the second arduino
+answer = api.dev2.request(5) # request to the second arduino
+print(answer)
 ```
-
-## Push command
-
-On Arduino you can send a command like: ```[code(1 Byte)][argsCount(1 Byte)] [arg1][arg2]...``` when each argument is a real number takes 4 bytes.
-
-Typical push:
-```
-api.arduino1.push([code], [arg1], [arg2]...)
-# or
-api.arduino1.push([code]) # without any args
-```
-
-## Pull command
-
-Arduino will send you JSON. You can use any json parsing library.
-
-```
-response = api.arduino1.pull()
-json.loads(response)
-```
-
-## Request command
-
-Request is just push() after which goes pull(). It is just launch two functions in order.
 
 ## License
 
