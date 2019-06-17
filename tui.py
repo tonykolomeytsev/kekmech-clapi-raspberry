@@ -20,6 +20,10 @@ class ClapiTUI(npyscreen.StandardApp):
         input_view = self.main_form.input_view
         current_device = self.data.current_device
         
+        def callback_add_response(data):
+            self.data.log("RESPONSE\n" + self.beautify_json(data))
+            self.scroll_end()
+        
         try:
             # LOGIC
             chain = re.split(r'\s+' ,cmd.strip().upper())
@@ -44,29 +48,25 @@ class ClapiTUI(npyscreen.StandardApp):
             
             text_to_print = '{} {} {}'.format(cmd_type, chain[1], cmd_args)
         except:
-            text_to_print = 'Error while parsing command {} for {}\n'.format(cmd, current_device)
+            text_to_print = 'Error while parsing command {} for {}\n{}\n'.format(cmd, current_device,chain)
         
         # VIEW
         self.data.log(text_to_print)
         self.clear_view()
 
     def clear_view(self):
-        scroll_end()
+        self.scroll_end()
         self.main_form.input_view.value = ""
         self.main_form.input_view.display()
 
-    def callback_add_response(self, data):
-        self.data.log("RESPONSE\n" + beautify_json(data))
-        self.scroll_end()
-
-    def scroll_end(self, log_view):
+    def scroll_end(self):
         self.offset = 0
         self.main_form.log_view.value = self.data.scrolled_lines(
             offset=self.offset,
             lines_count=self.main_form.log_view._real_height - 2)
         self.main_form.log_view.display()
         
-    def scroll_up(self, log_view):
+    def scroll_up(self):
         h = self.main_form.log_view._real_height - 2
         self.offset += 1 if len(self.data.log_lines) - self.offset > h else 0
         self.main_form.log_view.value = self.data.scrolled_lines(
@@ -74,7 +74,7 @@ class ClapiTUI(npyscreen.StandardApp):
             lines_count=h)
         self.main_form.log_view.display()
         
-    def scroll_down(self, log_view):
+    def scroll_down(self):
         h = self.main_form.log_view._real_height - 2
         self.offset -= 1 if self.offset > 0 else 0
         self.main_form.log_view.value = self.data.scrolled_lines(
@@ -87,6 +87,7 @@ class ClapiTUI(npyscreen.StandardApp):
         for k,v in data.items():
             response += "    {}: {}\n".format(k,v)
         response += "}"
+        return response
     
     def check_current_device(self):
         self.data.check_current_device()
@@ -154,8 +155,8 @@ class MainFrame(npyscreen.FormBaseNew):
         # HANDLERS
         new_handlers = { 
             "^Q": self.exit_func,
-            curses.KEY_UP: self.on_scroll_up,
-            curses.KEY_DOWN: self.on_scroll_down
+            curses.ascii.alt(chr(curses.KEY_UP)): self.on_scroll_up,
+            curses.ascii.alt(chr(curses.KEY_DOWN)): self.on_scroll_down
         }
         self.add_handlers(new_handlers)
         self.add_event_hander("event_value_edited", self.on_message)
@@ -198,13 +199,13 @@ class ClapiTUIData():
         if lines_count < len(self.log_lines):
             start = -lines_count-offset
             end = -offset
-            return "\n".join(self.log_lines[start:end]) 
+            return "\n".join(self.log_lines[start:end]) if end != 0 else "\n".join(self.log_lines[start:])
         else:
             return "\n".join(self.log_lines)
     
     def check_current_device(self):
         self.current_device_id = tui.main_form.dev_list.get_value()
-        self.current_device = tui.main_form.dev_list.values[current_device_id]
+        self.current_device = tui.main_form.dev_list.values[self.current_device_id]
 
 
 
