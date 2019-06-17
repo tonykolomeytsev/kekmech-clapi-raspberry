@@ -143,3 +143,9 @@ class SerialWrapper:
             self.push(CMD_HANDSHAKE,[])
         line = self.pull()
         return json.loads(line)
+
+
+
+if __name__=="__main__":
+    import tui
+    tui.start(sys.modules[__name__])
