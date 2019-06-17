@@ -16,7 +16,7 @@ Visit the [wiki](https://github.com/tonykolomeytsev/kekmech-clapi-raspberry/wiki
 Clone or download the project to your local computer (raspberry?) and in the root project folder run the command:
 
 ```
-sudo python3 setup.py install
+python3 setup.py install
 ```
 
 ## Using
