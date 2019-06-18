@@ -1,5 +1,7 @@
 # Clapi
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-brightgreen.svg)](https://opensource.org/licenses/MIT)
+
 A library for transferring data between Raspberry Pi, Arduino and STM32 Nucleo using Serial. The library is designed to work with [Clapi Arduino](https://github.com/tonykolomeytsev/kekmech-clapi-arduino) or [Clapi Nucleo](https://github.com/tonykolomeytsev/kekmech-clapi-nucleo).
 
 ![alt text](https://raw.githubusercontent.com/tonykolomeytsev/kekmech-clapi-raspberry/master/img.png)
