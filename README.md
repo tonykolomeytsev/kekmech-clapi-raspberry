@@ -4,7 +4,7 @@
 [![Build Status](https://travis-ci.org/tonykolomeytsev/kekmech-clapi-raspberry.svg?branch=master)](https://travis-ci.org/tonykolomeytsev/kekmech-clapi-raspberry)
 ![GitHub tag (latest SemVer)](https://img.shields.io/github/tag/tonykolomeytsev/kekmech-clapi-raspberry.svg?label=version)
 
-A library for transferring data between Raspberry Pi, Arduino and STM32 Nucleo using Serial. The library is designed to work with [Clapi Arduino](https://github.com/tonykolomeytsev/kekmech-clapi-arduino) or [Clapi Nucleo](https://github.com/tonykolomeytsev/kekmech-clapi-nucleo).
+A simple library for controlling Arduino and STM32 Nucleo via Raspberry Pi using Serial. The library is designed to work with [Clapi Arduino](https://github.com/tonykolomeytsev/kekmech-clapi-arduino) or [Clapi Nucleo](https://github.com/tonykolomeytsev/kekmech-clapi-nucleo).
 
 ![alt text](https://raw.githubusercontent.com/tonykolomeytsev/kekmech-clapi-raspberry/master/img.png)
 
