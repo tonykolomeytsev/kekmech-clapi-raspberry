@@ -1,17 +1,14 @@
 """
-Дополнение к библиотеке Clapi, добавляющее асинхронные запросы к устройствам.
-Внешний вид API максимально приближен к API запросов HTTP.
-Прямой вызов функций и классов из этого файла предусмотрен только для дебага,
-для всех остальных случаев лучше использовать Clapi, который всё сделает за вас.
+Addition to the Clapi library adding asynchronous requests to devices.
+The appearance of the API is as close as possible to the HTTP request API.
+Direct call of functions and classes from this file is provided only for debug cases,
+for all other cases it is better to use only clapy.py functions.
 """
 
 from threading import Thread, Lock
 import json
 import time
 
-# должна быть очередь из тасков, которые отправляются на МК. При этом некоторые таски не удаляются после выполнения
-# например таск опроса дальномеров работает все время и только между запросами на дальномеры будут отправляться другие команды
-# вот это реально боевые условия, посмотрим на скорость работы этого всего
 
 
 class TaskPool():
@@ -19,79 +16,78 @@ class TaskPool():
     def __init__(self, serial_wrapper):
         self.serial_wrapper = serial_wrapper
         self.running = True
-        self.main_thread = None # поток, отправляющий таски по очереди
-        self.tasks = list() # очередь из тасков
-        self.subscribers = dict() # список подписчиков (CODE -> LISTENER) где CODE - код команды, на которую ожидается ответ
-        self.task_lock = Lock() # локер для потокобезопасного обращения к списку тасков
-        self.inbox = dict()
+        self.main_thread = None # thread that processes incoming messages and tasks
+        self.tasks = list() # tasks queue
+        self.subscribers = dict() # (CODE -> LISTENER) where CODE is code of the Task for which the response is expected
+        self.task_lock = Lock() 
+        self.inbox = dict() # for messages which nobody waited
 
-    # Добавление таска на выполнение. 
     def push_task(self, task):
+        """ Add task to perform and run main thread """
         self.task_lock.acquire()
         self.tasks.append(task)
-        # если поток по каким-то причинам мертв, то создадим и запустим его
+        # run thread if it is not alive
         if not self.main_thread or not self.main_thread.isAlive():
             self.main_thread = Thread(target=self.main_loop, daemon=False) # daemon=True for force terminating
             self.main_thread.start()
         self.task_lock.release()
 
-    # Добавление подписчика (слушателя) входящих сообщений
     def push_subscriber(self, s):
+        """ Add subscriber for incoming messages """
         self.subscribers[s._code] = s
     
-    # Мейнлуп для выполнения тасков
-    # Сначала обрабатываем входящие сообщения, потом отправляем
     def main_loop(self):
+        """
+        Main loop for task performing.
+        First, check incoming messages, then perform ONE task
+        """
         while self.running:
             self.task_lock.acquire()
-            # принимаем все входящие сообщения
+            # accept incoming messages
             self.process_input()
             if len(self.tasks):
                 self.process_output()
             else:
-                time.sleep(0) # аналог thread.yield() в других языках
+                time.sleep(0) # like thread.yield() in other langs
             self.task_lock.release()
     
-    # Обрабатываем все входящие сообщения.
-    # Если пришел ответ на LongPoll, сообщаем о нем подписчику и заново добавляем LongPoll в список тасков
     def process_input(self):
-        # TRY TO PRESERVE MESSAGES LOST
+        # TRY TO PRESERVE MESSAGES
         for code, message in self.inbox.items():
             target = self.subscribers.get(code, None)
             if target:
-                if target._callback: # в теории по-любому будет callback, но мы то знаем ;)
+                if target._callback:
                     target._callback(message)
                 self.subscribers.pop(code, None)
                 self.inbox.pop(code, None)
-                if isinstance(target, LongPoll): # если выполненный таск был long-poll, то заново добавляем его в список тасков
+                if isinstance(target, LongPoll):
                     self.push_task(target)
 
         while self.serial_wrapper.inWaiting():
             response = json.loads(self.serial_wrapper.pull())
             code = response.get('code', -1)
             if code == -1:
-                print('Response to the void (response without CODE):', response) # отвечать без идентификационного номера нельзя
+                print('Response to the void (response without CODE):', response) # You cannot reply to asynchronous messages without the "code" field.
             else:
                 target = self.subscribers.get(code, None)
-                if target: # в теории подписчик по-любому должен быть, но на всякий случай надо перестраховаться
-                    if target._callback: # в теории по-любому будет callback, но мы то знаем ;)
+                if target:
+                    if target._callback:
                         target._callback(response)
                     self.subscribers.pop(code, None)
-                    if isinstance(target, LongPoll): # если выполненный таск был long-poll, то заново добавляем его в список тасков
+                    if isinstance(target, LongPoll): # add performed task again to the task queue if the task is long-poll
                         self.push_task(target)
-                else: # чтобы не потерять входящее сообщение, сохраним его
+                else: # if the message has no recipient
                     self.inbox[code] = response
 
-    # Берем из начала очереди таск, делаем с ним что нужно. В очередь никого не возвращаем.
-    # LongPoll будет возвращен в очередь в методе process_input() после того как на этот таск придет ответ.
     def process_output(self):
-        cur_task = self.tasks.pop(0) # берем из начала
+        """ Perform ONE task """
+        cur_task = self.tasks.pop(0) # take task from queue start
 
         if isinstance(cur_task, Push):
             self.serial_wrapper.push(cur_task._code, list(cur_task._args))
         
         if isinstance(cur_task, Request) or isinstance(cur_task, LongPoll):
-            self.push_subscriber(cur_task) # добавляем подписчика
+            self.push_subscriber(cur_task) # add subscriber if task is request or long-poll
             self.serial_wrapper.push(cur_task._code, list(cur_task._args))
 
     def reset(self):

@@ -11,7 +11,7 @@ from asynclapi import *
 
 
 BAUD_RATE = 115200
-KEKMECH_VERSION = '1.1'
+KEKMECH_VERSION = '1.2.2'
 CMD_HANDSHAKE = 0x13
 
 debug = False
@@ -20,6 +20,7 @@ core = None
 
 
 def start():
+    """ Set up connection with all connected devices """
     global core
     core = Core()
 
@@ -30,13 +31,19 @@ def status():
 
 
 class Core:
+    """
+    Сore object stores a list of devices and adds 
+    links to devices to Clapi module attributes
+    """
 
-    # Связываемся со всеми подключенными ардуинками
     def __init__(self):
-        # получаем список подключённых по USB устройств
-        # для UNO dev/ttyACM + для NANO dev/ttyUSB
+        """
+        Trying to connect with all connected devices and
+        get a list of devices connected via USB.
+        Chineese arduino: /dev/ttyUSB###
+        Arduino and STM32: /dev/ttyACM###
+        """
         devices = ['/dev/ttyACM' + str(i) for i in range(0, 4)] + ['/dev/ttyUSB' + str(i) for i in range(0, 4)]
-        # пытаемся подключиться к ним, как к ардуине и получаем список ардуин
         activeDevices = map(lambda e: Device(e) if os.path.exists(e) else None, devices)
         clapiModule = sys.modules[__name__]
         self.devices = list()
@@ -48,12 +55,15 @@ class Core:
 
 
 class Device:
+    """
+    The Device instance is trying to communicate over the protocol 
+    with the deviceId (for example "/dev/ttyUSB0") that it was given
+    """
 
-    # Экземпляр ардуинки пытается связаться по протоколу с тем deviceId, что ей дали
     def __init__(self, deviceId):
         self.serial = SerialWrapper(s.Serial(deviceId, BAUD_RATE), deviceId)
         self.task_pool = TaskPool(self.serial)
-        # рукопожатие (попытка соединиться с устройством)
+        # handshake is an attempt to establish a connection with the device
         self.data = self.serial.handshake()
         
         if (self.data is not None):
@@ -95,20 +105,20 @@ class Device:
 
 
 
-# обёртка для Serial
 class SerialWrapper:
+    """ Convenient wrapper for Serial. Also used for testing """
 
-    # просто получаем значения извне. dependency injection
     def __init__(self, serial, deviceId):
+        """ Don't create serial instance here, get in outside """
         self.serial = serial
         self.deviceId = deviceId
 
-    # перевод дробного числа в массив байт
     def decompose(self, number):
+        """ Convert float to byte array """
         return bytes(struct.pack('f', number))
 
-    # отправка стандартного сообщения на Arduino
     def push(self, code:int, args):
+        """ Send message to device """
         if debug: 
             print('push', self.deviceId, '>>', {'code': code, 'args': args})
         argsCount = len(args)
@@ -127,8 +137,8 @@ class SerialWrapper:
     def clear_input(self):
         self.serial.reset_input_buffer()
 
-    # принять сообщение от Arduino
     def pull(self):
+        """ Get a message from the device """
         response = self.serial.readline().decode('ascii').rstrip()
         if debug:
             print('pull', self.deviceId, '<<', response)
@@ -137,8 +147,8 @@ class SerialWrapper:
     def inWaiting(self):
         return self.serial.inWaiting()
 
-    # установка соединения с Arduino
     def handshake(self):
+        """ Set up connection """
         if not self.serial.inWaiting():
             self.push(CMD_HANDSHAKE,[])
         line = self.pull()
