@@ -20,7 +20,7 @@ Visit the [wiki](https://github.com/tonykolomeytsev/kekmech-clapi-raspberry/wiki
 Clone or [download](https://github.com/tonykolomeytsev/kekmech-clapi-raspberry/archive/master.zip) the project to your local computer (raspberry?) and in the root project folder run the command:
 
 ```
-sudo python3 setup.py install
+make
 ```
 
 ## Using
